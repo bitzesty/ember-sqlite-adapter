@@ -1,25 +1,37 @@
-# Ember-sqlite-adapter
+# Ember SQLite Adapter
 
-This README outlines the details of collaborating on this Ember addon.
+This addon is intended to be used with PhoneGap/Cordova and provides an adapter and serializer for Ember Data.
+
+## Pre-requisites
+
+* [Cordova SQLite plugin](https://github.com/litehelpers/Cordova-sqlite-storage) installed
 
 ## Installation
 
-* `git clone` this repository
-* `npm install`
-* `bower install`
+To install this addon, please use the following command:
 
-## Running
-
-* `ember server`
-* Visit your app at http://localhost:4200.
+```
+ember install ember-sqlite-adapter
+```
 
 ## Running Tests
 
 * `ember test`
 * `ember test --server`
 
-## Building
 
-* `ember build`
+## Versioning
 
-For more information on using ember-cli, visit [http://www.ember-cli.com/](http://www.ember-cli.com/).
+This library follows [Semantic Versioning](http://semver.org/)
+
+## Want to help?
+
+Great! Please do help, we are always trying to improve this library.
+
+## Legal
+
+[Bit Zesty](http://bitzesty.com) (c) 2015
+
+[@bitzesty](http://twitter.com/bitzesty)
+
+[Licensed under the MIT license](https://github.com/bitzesty/ember-sqlite-adapter/blob/master/LICENSE.md)
