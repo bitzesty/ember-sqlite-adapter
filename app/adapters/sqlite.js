@@ -1,0 +1,1 @@
+export { default } from 'ember-sqlite-adapter/adapters/sqlite';
