@@ -11,7 +11,7 @@ export default Ember.Service.extend({
   openDatabase: function() {
     var config = this.container.lookupFactory('config:environment');
 
-    this.db = window.sqlitePlugin.openDatabase({name: config.sqlite.db_name + ".db", location: 2});
+    this.db = window.sqlitePlugin.openDatabase({name: config.sqlite.db_name + ".db"});
 
     this.checkAndCreateTableIfNecessary();
   }.on("init"),
@@ -32,6 +32,111 @@ export default Ember.Service.extend({
   checkAndCreateTableIfNecessary: function() {
     this.db.transaction(function(transaction) {
       transaction.executeSql('CREATE TABLE IF NOT EXISTS serialized_records (type text, id text, data text)');
+    });
+  },
+
+  findAll: function(type) {
+    var _this = this;
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        transaction.executeSql("SELECT * from serialized_records WHERE type = '" + type.modelName + "';", [], function(tx, res) {
+          var rows = [];
+
+          for (var i = 0; i < res.rows.length; i++) {
+            rows.push(JSON.parse(res.rows.item(i).data || "{}"));
+          }
+
+          Ember.run(null, resolve, rows);
+        }, function(e) {
+          Ember.run(null, reject, e);
+        });
+      });
+    });
+  },
+
+  findRecord: function(type, id) {
+    var _this = this;
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        transaction.executeSql("SELECT * from serialized_records WHERE type = ? AND id = ?;", [type.modelName, id], function(tx, res) {
+          if (res.rows.length === 0) {
+            return reject("Not found");
+          }
+
+          var row = JSON.parse(res.rows.item(0).data || "{}");
+
+          resolve(row);
+        }, function(e) {
+          reject(e);
+        });
+      });
+    });
+  },
+
+  createRecord: function(store, type, snapshot) {
+    var data = {};
+    var serializer = store.serializerFor(type.modelName);
+    var _this = this;
+
+    serializer.serializeIntoHash(data, type, snapshot, { includeId: true });
+
+    data.id = window.shortid.generate();
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        var sql = "INSERT INTO serialized_records (type, id, data) VALUES (?, ?, ?);";
+        var params = [type.modelName, data.id, JSON.stringify(data)];
+
+        transaction.executeSql(sql, params, function(tx, res) {
+          if (res.rowsAffected === 0) {
+            return reject("Insert failed");
+          }
+
+          resolve(data);
+        }, function(e) {
+          reject(e);
+        });
+      });
+    });
+  },
+  updateRecord: function(type, id, data) {
+    var _this = this;
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        var sql = "UPDATE serialized_records SET data = ? WHERE id = ? AND type = ?;";
+        var params = [JSON.stringify(data), id, type];
+
+        transaction.executeSql(sql, params, function(tx, res) {
+          if (res.rowsAffected === 0) {
+            return reject("Update failed");
+          }
+
+          resolve(data);
+        }, function(e) {
+          reject(e);
+        });
+      });
+    });
+  },
+  deleteRecord: function(type, id, data) {
+    var _this = this;
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        var sql = "DELETE FROM serialized_records WHERE id = ? AND type = ?;";
+        var params = [id, type];
+
+        transaction.executeSql(sql, params, function(tx, res) {
+          if (res.rowsAffected === 0) {
+            return reject("DELETE failed");
+          }
+
+          resolve(data);
+        }, function(e) {
+          reject(e);
+        });
+      });
     });
   }
 });
