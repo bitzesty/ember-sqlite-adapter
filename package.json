@@ -11,12 +11,12 @@
     "start": "ember server",
     "test": "ember try:testall"
   },
-  "repository": "",
+  "repository": "git@github.com:bitzesty/ember-sqlite-adapter.git",
   "engines": {
     "node": ">= 0.10.0"
   },
   "main": "index.js",
-  "author": "",
+  "author": "Maurício André Cinelli",
   "license": "MIT",
   "devDependencies": {
     "broccoli-asset-rev": "^2.1.2",
