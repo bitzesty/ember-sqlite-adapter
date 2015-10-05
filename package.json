@@ -15,6 +15,7 @@
   "engines": {
     "node": ">= 0.10.0"
   },
+  "main": "index.js",
   "author": "",
   "license": "MIT",
   "devDependencies": {
