@@ -1,4 +1,5 @@
 import Ember from 'ember';
+import QueryBuilder from "../lib/query";
 
 export default Ember.Service.extend({
   /**
@@ -8,13 +9,17 @@ export default Ember.Service.extend({
    *
    * @return {void} Open database and invoke function to create table
    */
-  openDatabase: function() {
+  openDatabase: Ember.on('init', function() {
     var config = this.container.lookupFactory('config:environment');
 
-    this.db = window.sqlitePlugin.openDatabase({name: config.sqlite.db_name + ".db"});
+    if (window.cordova) {
+      this.db = window.sqlitePlugin.openDatabase({name: config.sqlite.db_name + ".db", androidDatabaseImplementation: 2, androidLockWorkaround: 1});
+    } else {
+      this.db = window.openDatabase(config.sqlite.db_name, '1.0', config.sqlite.db_name, 1);
+    }
 
     this.checkAndCreateTableIfNecessary();
-  }.on("init"),
+  }),
 
   /**
    * This method opens up a transaction to create the table we are going
@@ -31,7 +36,8 @@ export default Ember.Service.extend({
    */
   checkAndCreateTableIfNecessary: function() {
     this.db.transaction(function(transaction) {
-      transaction.executeSql('CREATE TABLE IF NOT EXISTS serialized_records (type text, id text, data text)');
+      transaction.executeSql('CREATE TABLE IF NOT EXISTS serialized_records (type text, id text, data blob)');
+      transaction.executeSql('CREATE TABLE IF NOT EXISTS images (id text, data blob)');
     });
   },
 
@@ -137,6 +143,13 @@ export default Ember.Service.extend({
           reject(e);
         });
       });
+    });
+  },
+
+  // not the adapters query, but rather a query builder
+  query: function() {
+    return QueryBuilder.create({
+      connection: this.db
     });
   }
 });
