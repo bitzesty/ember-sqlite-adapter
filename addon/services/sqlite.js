@@ -12,10 +12,12 @@ export default Ember.Service.extend({
   openDatabase: Ember.on('init', function() {
     var config = this.container.lookupFactory('config:environment');
 
+    var db_name = config !== undefined ? config.sqlite.db_name : "my_app_db";
+
     if (window.cordova) {
-      this.db = window.sqlitePlugin.openDatabase({name: config.sqlite.db_name + ".db", androidDatabaseImplementation: 2, androidLockWorkaround: 1});
+      this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db", androidDatabaseImplementation: 2, androidLockWorkaround: 1});
     } else {
-      this.db = window.openDatabase(config.sqlite.db_name, '1.0', config.sqlite.db_name, 1);
+      this.db = window.openDatabase(db_name, '1.0', db_name, 1);
     }
 
     this.checkAndCreateTableIfNecessary();
