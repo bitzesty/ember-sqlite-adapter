@@ -3,44 +3,132 @@ import QueryBuilder from "../lib/query";
 
 export default Ember.Service.extend({
   /**
-   * This method fires up on service initialization, and is responsible for
+   * This method is responsible for
    * opening the database with the name fetched from the app's configuration file,
    * and then calls the function to create the necessary table.
    *
    * @return {void} Open database and invoke function to create table
    */
-  openDatabase: Ember.on('init', function() {
-    var config = this.container.lookupFactory('config:environment');
+  openDatabase: function() {
+    var _this = this;
 
-    var db_name = config !== undefined ? config.sqlite.db_name : "my_app_db";
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      var config = _this.container.lookupFactory('config:environment');
 
-    if (window.cordova) {
-      this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db", androidDatabaseImplementation: 2, androidLockWorkaround: 1});
-    } else {
-      this.db = window.openDatabase(db_name, '1.0', db_name, 1);
-    }
+      var db_name = config !== undefined ? config.sqlite.db_name : "my_app_db";
 
-    this.checkAndCreateTableIfNecessary();
-  }),
+      if (window.cordova && window.sqlitePlugin !== undefined) {
+        _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db", androidDatabaseImplementation: 2, androidLockWorkaround: 1});
+      } else {
+        // WebSQL
+        _this.db = window.openDatabase(db_name, '1.0', db_name, 1);
+      }
+
+      _this.checkCreateTables(_this.container).then(resolve, reject);
+    });
+  },
 
   /**
-   * This method opens up a transaction to create the table we are going
-   * to use to store the data, if it's not already there.
+   * This method creates the migrations table if it doesn't exist, and then
+   * loop through the migrations folder in the app, checking which ones need to run,
+   * and run the ones that need to.
    *
-   * We are going to use a single table in order to avoid migrations,
-   * and the overhead of needing to have the models definitions every time we
-   * need to do any operation.
+   * TODO: will be modified to accomodate Promises inside migrations
    *
-   * Also, by doing this way, it remains similar to how data is fetched from
-   * online sources: getting a JSON and de-serializing it.
-   *
-   * @return {void} Creates serialized_records table if it doesn't already exist
+   * @return {void} Run migrations if needed
    */
-  checkAndCreateTableIfNecessary: function() {
-    this.db.transaction(function(transaction) {
-      transaction.executeSql('CREATE TABLE IF NOT EXISTS serialized_records (type text, id text, data blob)');
-      transaction.executeSql('CREATE TABLE IF NOT EXISTS images (id text, data blob)');
+  checkCreateTables: function() {
+    var _this = this;
+
+    var modelNames = this.getModelNames();
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        transaction.executeSql('CREATE TABLE IF NOT EXISTS migrations (id integer, date integer)');
+
+        var migrations = _this.getMigrations();
+
+        var timestamps = migrations.map(function(name) {
+          return name.split("-")[0];
+        });
+
+        transaction.executeSql("SELECT * FROM migrations WHERE id IN (?)", [timestamps], function(tx, res) {
+          var alreadyExecuted = [];
+
+          for (var i = 0; i < res.rows.length; i++) {
+            alreadyExecuted.push(res.rows.item(i).id + "");
+          }
+
+          migrations.forEach(function(name) {
+            var migration = _this.container.lookup("migration:" + name);
+            var timestamp = name.split("-")[0];
+
+            if (alreadyExecuted.indexOf(timestamp) === -1) {
+              Ember.debug("Executing migration of id: " + timestamp);
+              transaction.executeSql(migration.get("sql"), [], function(tx, res) {
+                transaction.executeSql("INSERT INTO migrations (id, date) VALUES (?, ?)", [timestamp, new Date().getTime()]);
+              });
+            }
+          });
+
+          resolve();
+        });
+      }, function(error) {
+        Ember.debug(error);
+        reject();
+      });
     });
+  },
+
+  /**
+   * Function shamelessly copied over
+   * from ember-i18n code to fetch locales.
+   *
+   * We're doing the same except we are filtering jshint temp
+   * files and test ones as well.
+   *
+   * TODO: check if we need to keep test ones
+   * @return {Array} Array of model names
+   */
+  getModelNames: function() {
+    var matchKey = '/models/(.+)$';
+    return Object.keys(requirejs.entries)
+    .reduce((models, module) => {
+      var match = module.match(matchKey);
+      if (match) {
+        models.pushObject(match[1]);
+      }
+      return models;
+    }, Ember.A())
+    .filter(function(match) {
+      return match.indexOf("-test") === -1 && match.indexOf(".jshint") === -1;
+    });
+  },
+
+  /**
+   * Function shamelessly copied over
+   * from ember-i18n code to fetch locales.
+   *
+   * We're doing the same except we are filtering jshint temp
+   * files and test ones as well.
+   *
+   * TODO: check if we need to keep test ones
+   * @return {Array} Array of model names
+   */
+  getMigrations: function() {
+    var matchKey = '/migrations/(.+)$';
+    return Object.keys(requirejs.entries)
+    .reduce((migrations, module) => {
+      var match = module.match(matchKey);
+      if (match) {
+        migrations.pushObject(match[1]);
+      }
+      return migrations;
+    }, Ember.A())
+    .filter(function(match) {
+      return match.indexOf("-test") === -1 && match.indexOf(".jshint") === -1;
+    })
+    .sort();
   },
 
   findAll: function(type) {

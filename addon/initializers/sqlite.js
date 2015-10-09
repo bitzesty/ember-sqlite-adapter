@@ -1,12 +1,25 @@
 export function initialize(container, application) {
   application.deferReadiness();
 
-  document.addEventListener("deviceready", function() {
-    application.inject('adapter', 'sqlite', 'service:sqlite');
-    application.inject('serializer', 'sqlite', 'service:sqlite');
+  var sqlite = container.lookup("service:sqlite");
 
-    application.advanceReadiness();
-  }, false);
+  if (window.cordova) {
+    document.addEventListener("deviceready", function() {
+      sqlite.openDatabase().then(function() {
+        application.inject('adapter', 'sqlite', 'service:sqlite');
+        application.inject('serializer', 'sqlite', 'service:sqlite');
+
+        application.advanceReadiness();
+      });
+    }, false);
+  } else {
+    sqlite.openDatabase().then(function() {
+      application.inject('adapter', 'sqlite', 'service:sqlite');
+      application.inject('serializer', 'sqlite', 'service:sqlite');
+
+      application.advanceReadiness();
+    });
+  }
 }
 
 export default {
