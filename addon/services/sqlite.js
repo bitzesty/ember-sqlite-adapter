@@ -33,8 +33,6 @@ export default Ember.Service.extend({
    * loop through the migrations folder in the app, checking which ones need to run,
    * and run the ones that need to.
    *
-   * TODO: will be modified to accomodate Promises inside migrations
-   *
    * @return {void} Run migrations if needed
    */
   checkCreateTables: function() {
@@ -59,19 +57,34 @@ export default Ember.Service.extend({
             alreadyExecuted.push(res.rows.item(i).id + "");
           }
 
+          var lastPromise = new Ember.RSVP.Promise(function(resolve) {
+            resolve();
+          });
+
           migrations.forEach(function(name) {
             var migration = _this.container.lookup("migration:" + name);
             var timestamp = name.split("-")[0];
 
             if (alreadyExecuted.indexOf(timestamp) === -1) {
               Ember.debug("Executing migration of id: " + timestamp);
-              transaction.executeSql(migration.get("sql"), [], function(tx, res) {
-                transaction.executeSql("INSERT INTO migrations (id, date) VALUES (?, ?)", [timestamp, new Date().getTime()]);
+              lastPromise = lastPromise.then(function() {
+                var promise = migration._internalRun(transaction);
+                promise.then(function() {
+                  _this.db.transaction(function(tx) {
+                    tx.executeSql("INSERT INTO migrations (id, date) VALUES (?, ?)", [timestamp, new Date().getTime()]);
+                  }, function(error) {
+                    reject(error);
+                  });
+                });
+
+                return promise;
               });
             }
           });
 
-          resolve();
+          lastPromise.then(function() {
+            resolve();
+          });
         });
       }, function(error) {
         Ember.debug(error);

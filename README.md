@@ -24,7 +24,31 @@ Then, it came to me to use migrations. By using migrations all along, we leave t
 
 ## Migrations
 
-TODO
+To generate migrations, use the command line like so:
+
+```
+ember g migration CreateTableXXXXXX
+```
+
+and by doing that, a file will be created inside your `app/migrations` folder. It should look like this:
+
+```
+import Migration from "ember-sqlite-adapter/migration";
+
+export default Migration.extend({
+  run: function() {
+    // they'll be executed in the right order, but on the last one
+    // you'll need to call the `done` method:
+    //
+    // this.execute(sql);
+    // this.execute(sql);
+    // this.execute(sql, []);
+    // this.done();
+  }
+});
+```
+
+The execute method receives an sql param, and an array of inputs that you must pass if you use prepared statements.
 
 ## Running Tests
 
