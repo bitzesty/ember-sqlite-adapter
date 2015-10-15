@@ -79,7 +79,7 @@ export default Ember.Object.extend({
     var _this = this;
     this.transaction = transaction;
 
-    return new Ember.RSVP.Promise(function(resolve, _reject) {
+    return new Ember.RSVP.Promise(function(resolve) {
       _this._resolve = resolve;
 
       _this.run();

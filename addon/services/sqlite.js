@@ -1,6 +1,8 @@
 import Ember from 'ember';
 import QueryBuilder from "../lib/query";
 
+/* global requirejs */
+
 export default Ember.Service.extend({
   /**
    * This method is responsible for
@@ -37,8 +39,6 @@ export default Ember.Service.extend({
    */
   checkCreateTables: function() {
     var _this = this;
-
-    var modelNames = this.getModelNames();
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
