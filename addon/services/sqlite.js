@@ -13,6 +13,7 @@ export default Ember.Service.extend({
    */
   openDatabase: function() {
     var _this = this;
+    this.schemaCache = {};
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       var config = _this.container.lookupFactory('config:environment');
@@ -144,12 +145,18 @@ export default Ember.Service.extend({
     .sort();
   },
 
+  pluralizeModelName: function(modelName) {
+    return modelName;
+  },
+
   findAll: function(type) {
     var _this = this;
+    // TODO: Search how to do pluralization of model names
+    var plural = this.pluralizeModelName(type.modelName);
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        transaction.executeSql("SELECT * from serialized_records WHERE type = '" + type.modelName + "';", [], function(tx, res) {
+        transaction.executeSql("SELECT * from '" + plural + "'", [], function(tx, res) {
           var rows = [];
 
           for (var i = 0; i < res.rows.length; i++) {
@@ -166,10 +173,11 @@ export default Ember.Service.extend({
 
   findRecord: function(type, id) {
     var _this = this;
+    var plural = this.pluralizeModelName(type.modelName);
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        transaction.executeSql("SELECT * from serialized_records WHERE type = ? AND id = ?;", [type.modelName, id], function(tx, res) {
+        transaction.executeSql("SELECT * from '" + plural + "' WHERE id = ?;", [id], function(tx, res) {
           if (res.rows.length === 0) {
             return reject("Not found");
           }
@@ -184,21 +192,59 @@ export default Ember.Service.extend({
     });
   },
 
+  fetchTableColumns: function(tableName) {
+    var _this = this;
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(tx) {
+        this.executeSql("PRAGMA table_info(" + tableName + ")", [], function(tx, res) {
+          var columnNames = [];
+
+          for (var i = 0; i < res.rows.length; i++) {
+            columnNames.push(res.rows.item(i).name);
+          }
+
+          resolve(columnNames);
+        });
+      }, function(error) {
+        reject(error);
+      });
+    });
+  },
+
   createRecord: function(store, type, snapshot) {
     var data = {};
     var serializer = store.serializerFor(type.modelName);
     var _this = this;
 
-    serializer.serializeIntoHash(data, type, snapshot, { includeId: true });
+    var data = snapshot.serialize();
 
     data.id = window.shortid.generate();
+    var plural = this.pluralizeModelName(type.modelName);
+    var promise = null;
+
+    if (this.schemaCache[plural]) {
+      promise = new Ember.RSVP.Promise(function(resolve) {
+        resolve(_this.)
+      })
+    }
+
+    if (columnNames.length === 0) {
+      columnNames = this.schemaCache[plural] = this.fetchTableColumns(plural);
+    }
+
+    // as it's an insert, it is important that the order of arguments is right
+    var insertData = columnNames.map(function(column) {
+      return snapshot[column] || null;
+    });
+
+    var prepParams = insertData.map(() => "?").join(", ");
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        var sql = "INSERT INTO serialized_records (type, id, data) VALUES (?, ?, ?);";
-        var params = [type.modelName, data.id, JSON.stringify(data)];
+        var sql = "INSERT INTO '" + plural + "' ('" + columnNames.join(", ") + "') VALUES ('" + prepParams + "');";
 
-        transaction.executeSql(sql, params, function(tx, res) {
+        transaction.executeSql(sql, insertData, function(tx, res) {
           if (res.rowsAffected === 0) {
             return reject("Insert failed");
           }
