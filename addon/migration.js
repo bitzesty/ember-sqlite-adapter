@@ -48,8 +48,10 @@ export default Ember.Object.extend({
 
     this.promiseChain = this.promiseChain.then(function() {
       return new Ember.RSVP.Promise(function(resolve) {
-        _this.transaction.executeSql(sql, preparedInputs, function(tx, res) {
-          resolve(res);
+        _this.db.transaction(function(tx) {
+          tx.executeSql(sql, preparedInputs, function(tx, res) {
+            resolve(res);
+          });
         });
       });
     });
@@ -69,19 +71,18 @@ export default Ember.Object.extend({
   },
   /**
    * Method called by the migration runner.
-   * Receives a transaction and instruments the
+   * Receives a db connection and instruments the
    * main run method
    *
-   * @param  {SQLTransaction} transaction WebSQL or SQlite transaction object
+   * @param  {SQLConnection} transaction WebSQL or SQlite connection
    * @return {Promise}
    */
-  _internalRun: function(transaction) {
+  _internalRun: function(db) {
     var _this = this;
-    this.transaction = transaction;
+    this.db = db;
 
     return new Ember.RSVP.Promise(function(resolve) {
       _this._resolve = resolve;
-
       _this.run();
     });
   }

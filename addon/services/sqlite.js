@@ -1,5 +1,7 @@
 import Ember from 'ember';
 import QueryBuilder from "../lib/query";
+import Inflector from 'ember-inflector';
+import {singularize, pluralize} from 'ember-inflector';
 
 /* global requirejs */
 
@@ -69,7 +71,7 @@ export default Ember.Service.extend({
             if (alreadyExecuted.indexOf(timestamp) === -1) {
               Ember.debug("Executing migration of id: " + timestamp);
               lastPromise = lastPromise.then(function() {
-                var promise = migration._internalRun(transaction);
+                var promise = migration._internalRun(_this.db);
                 promise.then(function() {
                   _this.db.transaction(function(tx) {
                     tx.executeSql("INSERT INTO migrations (id, date) VALUES (?, ?)", [timestamp, new Date().getTime()]);
@@ -146,7 +148,7 @@ export default Ember.Service.extend({
   },
 
   pluralizeModelName: function(modelName) {
-    return modelName;
+    return pluralize(modelName);
   },
 
   findAll: function(type) {
@@ -160,10 +162,15 @@ export default Ember.Service.extend({
           var rows = [];
 
           for (var i = 0; i < res.rows.length; i++) {
-            rows.push(JSON.parse(res.rows.item(i).data || "{}"));
+            var row = res.rows.item(i);
+            row._id = row.id;
+            rows.push(row);
           }
 
-          Ember.run(null, resolve, rows);
+          var response = {};
+          response[plural] = rows;
+
+          Ember.run(null, resolve, response);
         }, function(e) {
           Ember.run(null, reject, e);
         });
@@ -179,35 +186,21 @@ export default Ember.Service.extend({
       _this.db.transaction(function(transaction) {
         transaction.executeSql("SELECT * from '" + plural + "' WHERE id = ?;", [id], function(tx, res) {
           if (res.rows.length === 0) {
-            return reject("Not found");
+            reject("Not found");
+            return;
           }
 
-          var row = JSON.parse(res.rows.item(0).data || "{}");
-
-          resolve(row);
+          var response = {};
+          var coreData = {};
+          Object.keys(res.rows.item(0)).forEach(function(key) {
+            coreData[key] = res.rows.item(0)[key];
+          });
+          coreData._id = coreData.id;
+          response[type.modelName] = coreData;
+          resolve(response);
         }, function(e) {
           reject(e);
         });
-      });
-    });
-  },
-
-  fetchTableColumns: function(tableName) {
-    var _this = this;
-
-    return new Ember.RSVP.Promise(function(resolve, reject) {
-      _this.db.transaction(function(tx) {
-        this.executeSql("PRAGMA table_info(" + tableName + ")", [], function(tx, res) {
-          var columnNames = [];
-
-          for (var i = 0; i < res.rows.length; i++) {
-            columnNames.push(res.rows.item(i).name);
-          }
-
-          resolve(columnNames);
-        });
-      }, function(error) {
-        reject(error);
       });
     });
   },
@@ -217,40 +210,45 @@ export default Ember.Service.extend({
     var serializer = store.serializerFor(type.modelName);
     var _this = this;
 
-    var data = snapshot.serialize();
+    var data = snapshot.serialize({ includeId: true });
+    var pk = serializer.get("primaryKey");
+    // to handle cases when primary key is not 'id'
+    data.id = data[pk];
 
-    data.id = window.shortid.generate();
+    if (data.id === undefined) {
+      data.id = window.shortid.generate();
+    }
     var plural = this.pluralizeModelName(type.modelName);
-    var promise = null;
+    var columnNames = null;
 
     if (this.schemaCache[plural]) {
-      promise = new Ember.RSVP.Promise(function(resolve) {
-        resolve(_this.)
-      })
+      columnNames = _this.schemaCache[plural];
+    } else {
+      columnNames = ["id"];
+      snapshot.eachAttribute(function(a) {
+        columnNames.push(a);
+      });
     }
-
-    if (columnNames.length === 0) {
-      columnNames = this.schemaCache[plural] = this.fetchTableColumns(plural);
-    }
-
-    // as it's an insert, it is important that the order of arguments is right
-    var insertData = columnNames.map(function(column) {
-      return snapshot[column] || null;
-    });
-
-    var prepParams = insertData.map(() => "?").join(", ");
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
+      // as it's an insert, it is important that the order of arguments is right
+      var insertData = columnNames.map(function(column) {
+        return data[column] || null;
+      });
+
+      var prepParams = insertData.map(() => "?").join(", ");
       _this.db.transaction(function(transaction) {
-        var sql = "INSERT INTO '" + plural + "' ('" + columnNames.join(", ") + "') VALUES ('" + prepParams + "');";
+        var sql = "INSERT INTO '" + plural + "' (" + columnNames.join(", ") + ") VALUES (" + prepParams + ");";
 
         transaction.executeSql(sql, insertData, function(tx, res) {
           if (res.rowsAffected === 0) {
             return reject("Insert failed");
           }
 
-          resolve(data);
-        }, function(e) {
+          var response = {id: data.id};
+          response[type.modelName] = data;
+          resolve(response);
+        }, function(tx, e) {
           reject(e);
         });
       });
@@ -258,18 +256,24 @@ export default Ember.Service.extend({
   },
   updateRecord: function(type, id, data) {
     var _this = this;
+    var plural = this.pluralizeModelName(type);
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        var sql = "UPDATE serialized_records SET data = ? WHERE id = ? AND type = ?;";
-        var params = [JSON.stringify(data), id, type];
+        var params = [];
+        var updates = Object.keys(data).map(function(key) {
+          params.push(data[key]);
+          return key + " = ?";
+        }).join(", ");
+        var sql = "UPDATE " + plural + " SET " + updates + " WHERE id = ?";
+        params.push(id);
 
         transaction.executeSql(sql, params, function(tx, res) {
-          if (res.rowsAffected === 0) {
-            return reject("Update failed");
-          }
-
-          resolve(data);
-        }, function(e) {
+          var response = {};
+          response[type] = data;
+          response[type].id = id;
+          response[type]._id = id;
+          resolve(response);
+        }, function(tx, e) {
           reject(e);
         });
       });
