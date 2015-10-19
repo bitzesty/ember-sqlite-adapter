@@ -53,7 +53,7 @@ export default Ember.Service.extend({
           return name.split("-")[0];
         });
 
-        transaction.executeSql("SELECT * FROM migrations WHERE id IN (?)", [timestamps], function(tx, res) {
+        transaction.executeSql("SELECT * FROM migrations", [], function(tx, res) {
           var alreadyExecuted = [];
 
           for (var i = 0; i < res.rows.length; i++) {
@@ -63,6 +63,7 @@ export default Ember.Service.extend({
           var lastPromise = new Ember.RSVP.Promise(function(resolve) {
             resolve();
           });
+          console.log(alreadyExecuted);
 
           migrations.forEach(function(name) {
             var migration = _this.container.lookup("migration:" + name);

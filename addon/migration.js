@@ -52,6 +52,8 @@ export default Ember.Object.extend({
           tx.executeSql(sql, preparedInputs, function(tx, res) {
             resolve(res);
           });
+        }, function(tx, error) {
+          console.error(arguments);
         });
       });
     });
