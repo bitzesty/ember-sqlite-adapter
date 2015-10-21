@@ -13,6 +13,40 @@ export default DS.RESTAdapter.extend({
   find: function(store, type, id) {
     return this.sqlite.findRecord(type, id);
   },
+  query: function(store, type, query) {
+    var url = this.buildURL(type.modelName, null, null, 'query', query);
+
+    if (this.sortQueryParams) {
+      query = this.sortQueryParams(query);
+    }
+
+    return this.sqlite.query(type, query);
+  },
+
+  /**
+    Called by the store in order to fetch a JSON object for
+    the record that matches a particular query.
+    The `queryRecord` method makes an Ajax (HTTP GET) request to a URL
+    computed by `buildURL`, and returns a promise for the resulting
+    payload.
+    The `query` argument is a simple JavaScript object that will be passed directly
+    to the server as parameters.
+    @method queryRecord
+    @param {DS.Store} store
+    @param {DS.Model} type
+    @param {Object} query
+    @return {Promise} promise
+  */
+  queryRecord: function(store, type, query) {
+    var url = this.buildURL(type.modelName, null, null, 'queryRecord', query);
+
+    if (this.sortQueryParams) {
+      query = this.sortQueryParams(query);
+    }
+
+    return this.ajax(url, 'GET', { data: query });
+  },
+
   updateRecord: function(store, type, snapshot) {
     var data = {};
     var serializer = store.serializerFor(type.modelName);

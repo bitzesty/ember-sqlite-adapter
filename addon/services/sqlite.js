@@ -152,9 +152,42 @@ export default Ember.Service.extend({
     return pluralize(modelName);
   },
 
+  query: function(type, query) {
+    var _this = this;
+    var plural = this.pluralizeModelName(type.modelName);
+    var wheres = [];
+    var params = [];
+
+    Object.keys(query).forEach(function(key) {
+      wheres.push(key + " = ?");
+      params.push(query[key]);
+    });
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        transaction.executeSql("SELECT * from '" + plural + "' WHERE " + wheres.join(" AND "), params, function(tx, res) {
+          var rows = [];
+
+          for (var i = 0; i < res.rows.length; i++) {
+            var row = res.rows.item(i);
+            row._id = row.id;
+            rows.push(row);
+          }
+
+          var response = {};
+          response[plural] = rows;
+
+          Ember.run(null, resolve, response);
+        });
+      }, function(tx, e) {
+        console.log(arguments);
+        Ember.run(null, reject, e);
+      });
+    });
+  },
+
   findAll: function(type) {
     var _this = this;
-    // TODO: Search how to do pluralization of model names
     var plural = this.pluralizeModelName(type.modelName);
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
@@ -250,6 +283,7 @@ export default Ember.Service.extend({
           response[type.modelName] = data;
           resolve(response);
         }, function(tx, e) {
+          console.log(arguments);
           reject(e);
         });
       });
@@ -258,6 +292,7 @@ export default Ember.Service.extend({
   updateRecord: function(type, id, data) {
     var _this = this;
     var plural = this.pluralizeModelName(type);
+
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
         var params = [];
@@ -275,6 +310,7 @@ export default Ember.Service.extend({
           response[type]._id = id;
           resolve(response);
         }, function(tx, e) {
+          console.log(arguments);
           reject(e);
         });
       });
@@ -297,13 +333,6 @@ export default Ember.Service.extend({
           reject(e);
         });
       });
-    });
-  },
-
-  // not the adapters query, but rather a query builder
-  query: function() {
-    return QueryBuilder.create({
-      connection: this.db
     });
   }
 });
