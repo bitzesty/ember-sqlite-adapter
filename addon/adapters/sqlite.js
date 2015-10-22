@@ -51,7 +51,6 @@ export default DS.RESTAdapter.extend({
     var data = {};
     var serializer = store.serializerFor(type.modelName);
 
-    serializer.serializeIntoHash(data, type, snapshot, { includeId: true });
     return this.sqlite.updateRecord(type.modelName, snapshot.get("id"), snapshot.serialize());
   },
   deleteRecord: function(store, type, snapshot) {

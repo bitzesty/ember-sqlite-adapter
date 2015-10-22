@@ -63,7 +63,6 @@ export default Ember.Service.extend({
           var lastPromise = new Ember.RSVP.Promise(function(resolve) {
             resolve();
           });
-          console.log(alreadyExecuted);
 
           migrations.forEach(function(name) {
             var migration = _this.container.lookup("migration:" + name);
@@ -232,7 +231,8 @@ export default Ember.Service.extend({
           coreData._id = coreData.id;
           response[type.modelName] = coreData;
           resolve(response);
-        }, function(e) {
+        }, function(tx, e) {
+          console.log(arguments);
           reject(e);
         });
       });
