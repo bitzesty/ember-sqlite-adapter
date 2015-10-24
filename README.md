@@ -2,6 +2,13 @@
 
 This addon is intended to be used with PhoneGap/Cordova, but does check for its presence ,falling back to a WebSQL database, which can be used for tests and development inside browsers.
 
+## Warning
+
+This addon should *NOT* be considered stable and production ready. It is under heavy development at this moment.
+By the time we hit 1.0, you can then assume it is stable.
+
+Tested only with Ember CLI 1.13+, Ember 1.13+ and Ember Data 1.13+.
+
 ## Pre-requisites
 
 * [Cordova SQLite plugin](https://github.com/litehelpers/Cordova-sqlite-storage) installed (if you want to use actual SQLite)

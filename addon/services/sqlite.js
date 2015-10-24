@@ -2,6 +2,7 @@ import Ember from 'ember';
 import QueryBuilder from "../lib/query";
 import Inflector from 'ember-inflector';
 import {singularize, pluralize} from 'ember-inflector';
+import uuid from "../lib/uuid";
 
 /* global requirejs */
 
@@ -148,7 +149,7 @@ export default Ember.Service.extend({
   },
 
   pluralizeModelName: function(modelName) {
-    return pluralize(modelName);
+    return pluralize(modelName).underscore();
   },
 
   query: function(type, query) {
@@ -204,7 +205,8 @@ export default Ember.Service.extend({
           response[plural] = rows;
 
           Ember.run(null, resolve, response);
-        }, function(e) {
+        }, function(tx, e) {
+          console.error(e);
           Ember.run(null, reject, e);
         });
       });
@@ -245,12 +247,9 @@ export default Ember.Service.extend({
     var _this = this;
 
     var data = snapshot.serialize({ includeId: true });
-    var pk = serializer.get("primaryKey");
-    // to handle cases when primary key is not 'id'
-    data.id = data[pk];
 
     if (data.id === undefined) {
-      data.id = window.shortid.generate();
+      data.id = uuid();
     }
     var plural = this.pluralizeModelName(type.modelName);
     var columnNames = null;
@@ -261,6 +260,12 @@ export default Ember.Service.extend({
       columnNames = ["id"];
       snapshot.eachAttribute(function(a) {
         columnNames.push(a);
+      });
+
+      snapshot.eachRelationship(function(name, relationship) {
+        if (relationship.kind === "belongsTo") {
+          columnNames.push(relationship.key + "_id");
+        }
       });
     }
 
@@ -289,30 +294,35 @@ export default Ember.Service.extend({
       });
     });
   },
-  updateRecord: function(type, id, data) {
+  updateRecord: function(store, type, id, snapshot) {
     var _this = this;
-    var plural = this.pluralizeModelName(type);
+    var plural = this.pluralizeModelName(type.modelName);
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
-      _this.db.transaction(function(transaction) {
-        var params = [];
-        var updates = Object.keys(data).map(function(key) {
-          params.push(data[key]);
-          return key + " = ?";
-        }).join(", ");
-        var sql = "UPDATE " + plural + " SET " + updates + " WHERE id = ?";
-        params.push(id);
+      _this.findRecord(type, id).then(function() {
+        _this.db.transaction(function(transaction) {
+          var data = snapshot.serialize({includeId: true});
+          var params = [];
+          var updates = Object.keys(data).map(function(key) {
+            params.push(data[key]);
+            return key + " = ?";
+          }).join(", ");
+          var sql = "UPDATE " + plural + " SET " + updates + " WHERE id = ?";
+          params.push(id);
 
-        transaction.executeSql(sql, params, function(tx, res) {
-          var response = {};
-          response[type] = data;
-          response[type].id = id;
-          response[type]._id = id;
-          resolve(response);
-        }, function(tx, e) {
-          console.log(arguments);
-          reject(e);
+          transaction.executeSql(sql, params, function(tx, res) {
+            var response = {};
+            response[type.modelName] = data;
+            response[type.modelName].id = id;
+
+            resolve(response);
+          }, function(tx, e) {
+            console.log(arguments);
+            reject(e);
+          });
         });
+      }, function() {
+        _this.createRecord(store, type, snapshot).then(resolve, reject);
       });
     });
   },
