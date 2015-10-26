@@ -252,22 +252,7 @@ export default Ember.Service.extend({
       data.id = uuid();
     }
     var plural = this.pluralizeModelName(type.modelName);
-    var columnNames = null;
-
-    if (this.schemaCache[plural]) {
-      columnNames = _this.schemaCache[plural];
-    } else {
-      columnNames = ["id"];
-      snapshot.eachAttribute(function(a) {
-        columnNames.push(a);
-      });
-
-      snapshot.eachRelationship(function(name, relationship) {
-        if (relationship.kind === "belongsTo") {
-          columnNames.push(relationship.key + "_id");
-        }
-      });
-    }
+    var columnNames = Object.keys(data);
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       // as it's an insert, it is important that the order of arguments is right
