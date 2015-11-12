@@ -369,9 +369,11 @@ export default Ember.Service.extend({
   },
   deleteRecord: function(type, id, data) {
     var _this = this;
+    var plural = this.pluralizeModelName(type.modelName);
+
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        var sql = "DELETE FROM serialized_records WHERE id = ? AND type = ?;";
+        var sql = "DELETE FROM " + plural + " WHERE id = ? AND type = ?;";
         var params = [id, type];
 
         transaction.executeSql(sql, params, function(tx, res) {
