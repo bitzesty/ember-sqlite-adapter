@@ -373,8 +373,8 @@ export default Ember.Service.extend({
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        var sql = "DELETE FROM " + plural + " WHERE id = ? AND type = ?;";
-        var params = [id, type];
+        var sql = "DELETE FROM " + plural + " WHERE id = ?;";
+        var params = [id];
 
         transaction.executeSql(sql, params, function(tx, res) {
           if (res.rowsAffected === 0) {
