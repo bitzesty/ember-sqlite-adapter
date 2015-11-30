@@ -45,6 +45,6 @@ export default DS.RESTAdapter.extend({
 
     serializer.serializeIntoHash(data, type, snapshot, { includeId: true });
 
-    return this.sqlite.deleteRecord(type.modelName, id, data);
+    return this.sqlite.deleteRecord(type, id, data);
   },
 });
