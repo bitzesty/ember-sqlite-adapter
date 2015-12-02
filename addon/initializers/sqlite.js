@@ -8,6 +8,7 @@ export function initialize(container, application) {
       sqlite.openDatabase().then(function() {
         application.inject('adapter', 'sqlite', 'service:sqlite');
         application.inject('serializer', 'sqlite', 'service:sqlite');
+        application.inject('route', 'sqlite', 'service:sqlite');
 
         application.advanceReadiness();
       });
@@ -16,6 +17,7 @@ export function initialize(container, application) {
     sqlite.openDatabase().then(function() {
       application.inject('adapter', 'sqlite', 'service:sqlite');
       application.inject('serializer', 'sqlite', 'service:sqlite');
+      application.inject('route', 'sqlite', 'service:sqlite');
 
       application.advanceReadiness();
     });

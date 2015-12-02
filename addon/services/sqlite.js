@@ -24,7 +24,7 @@ export default Ember.Service.extend({
       var db_name = config !== undefined ? config.sqlite.db_name : "my_app_db";
 
       if (window.cordova && window.sqlitePlugin !== undefined) {
-        _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db", androidDatabaseImplementation: 2, androidLockWorkaround: 1});
+        _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db"});
       } else {
         // WebSQL
         _this.db = window.openDatabase(db_name, '1.0', db_name, 1);
@@ -77,6 +77,7 @@ export default Ember.Service.extend({
                   _this.db.transaction(function(tx) {
                     tx.executeSql("INSERT INTO migrations (id, date) VALUES (?, ?)", [timestamp, new Date().getTime()]);
                   }, function(error) {
+                    console.log(error);
                     reject(error);
                   });
                 });
@@ -91,7 +92,7 @@ export default Ember.Service.extend({
           });
         });
       }, function(error) {
-        Ember.debug(error);
+        console.error(error);
         reject();
       });
     });
@@ -104,7 +105,6 @@ export default Ember.Service.extend({
    * We're doing the same except we are filtering jshint temp
    * files and test ones as well.
    *
-   * TODO: check if we need to keep test ones
    * @return {Array} Array of model names
    */
   getModelNames: function() {
@@ -157,6 +157,19 @@ export default Ember.Service.extend({
     var plural = this.pluralizeModelName(type.modelName);
     var wheres = [];
     var params = [];
+    var limit = -1;
+    var offset = -1;
+    var per_page = 10;
+
+    if (query.page !== undefined) {
+      per_page = query.per_page || 10;
+
+      limit = per_page;
+      offset = (query.page - 1) * per_page;
+
+      delete query.page;
+      delete query.per_page;
+    }
 
     Object.keys(query).forEach(function(key) {
       wheres.push(key + " = ?");
@@ -165,7 +178,22 @@ export default Ember.Service.extend({
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        transaction.executeSql("SELECT * from '" + plural + "' WHERE " + wheres.join(" AND "), params, function(tx, res) {
+        var sql = "SELECT * from '" + plural + "'";
+
+        if(wheres.length > 0) {
+          sql += " WHERE " + wheres.join(" AND ");
+        }
+
+        if (limit > 0) {
+          sql += " LIMIT " + limit;
+        }
+
+        if (offset > -1) {
+          sql += " OFFSET " + limit;
+        }
+
+        Ember.debug(sql);
+        transaction.executeSql(sql, params, function(tx, res) {
           var rows = [];
 
           for (var i = 0; i < res.rows.length; i++) {
@@ -180,7 +208,6 @@ export default Ember.Service.extend({
           Ember.run(null, resolve, response);
         });
       }, function(tx, e) {
-        console.log(arguments);
         Ember.run(null, reject, e);
       });
     });
@@ -264,6 +291,7 @@ export default Ember.Service.extend({
       _this.db.transaction(function(transaction) {
         var sql = "INSERT INTO '" + plural + "' (" + columnNames.join(", ") + ") VALUES (" + prepParams + ");";
 
+
         transaction.executeSql(sql, insertData, function(tx, res) {
           if (res.rowsAffected === 0) {
             return reject("Insert failed");
@@ -326,6 +354,22 @@ export default Ember.Service.extend({
           resolve(data);
         }, function(e) {
           reject(e);
+        });
+      });
+    });
+  },
+  /**
+   * TODO: add conditions
+   */
+  count: function(type) {
+    var _this = this;
+    var plural = this.pluralizeModelName(type);
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        var sql = "SELECT count(*) as c from " + plural;
+        transaction.executeSql(sql, [], function(tx, res) {
+          resolve(res.rows.item(0).c);
         });
       });
     });
