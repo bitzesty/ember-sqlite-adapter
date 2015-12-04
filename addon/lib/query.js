@@ -9,6 +9,7 @@ export default Ember.Object.extend({
     wheres: [],
     orders: [],
     limit: 0,
+    offset: 0,
     groups: []
   },
   reset: Ember.on("init", function() {
@@ -19,6 +20,7 @@ export default Ember.Object.extend({
       wheres: [],
       orders: [],
       limit: 0,
+      offset: 0,
       groups: []
     };
   }),
@@ -44,6 +46,11 @@ export default Ember.Object.extend({
   },
   limit: function(limit) {
     this.options.limit = limit;
+
+    return this;
+  },
+  offset: function(offset) {
+    this.options.offset = offset;
 
     return this;
   },
@@ -153,6 +160,10 @@ export default Ember.Object.extend({
 
     if (this.options.limit > 0) {
       sql += " LIMIT " + this.options.limit;
+    }
+
+    if (this.options.offset > 0) {
+      sql += " OFFSET " + this.options.offset;
     }
 
     return sql;

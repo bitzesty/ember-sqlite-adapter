@@ -152,54 +152,40 @@ export default Ember.Service.extend({
     return pluralize(modelName).underscore();
   },
 
-  query: function(type, query) {
+  query: function(type, options) {
     var _this = this;
     var plural = this.pluralizeModelName(type.modelName);
-    var wheres = [];
     var params = [];
-    var limit = -1;
-    var offset = -1;
-    var per_page = 10;
 
-    if (query.page !== undefined) {
-      per_page = query.per_page || 10;
+    var keywords = ["limit", "offset"];
 
-      limit = per_page;
-      offset = (query.page - 1) * per_page;
+    var query = QueryBuilder.create();
+    query.from(plural);
 
-      delete query.page;
-      delete query.per_page;
+    if (options.page !== undefined) {
+      per_page = options.per_page || 10;
+
+      query.limit(per_page);
+      query.offset((options.page - 1) * per_page);
     }
 
-    Object.keys(query).forEach(function(key) {
-      wheres.push(key + " = ?");
-      params.push(query[key]);
+    Object.keys(options).filter(function(k) {
+      return keywords.indexOf(k) === -1;
+    }).forEach(function(key) {
+      query.where([key, "?"]);
+      params.push(options[key]);
     });
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        var sql = "SELECT * from '" + plural + "'";
-
-        if(wheres.length > 0) {
-          sql += " WHERE " + wheres.join(" AND ");
-        }
-
-        if (limit > 0) {
-          sql += " LIMIT " + limit;
-        }
-
-        if (offset > -1) {
-          sql += " OFFSET " + limit;
-        }
+        var sql = query.buildSQL();
 
         Ember.debug(sql);
         transaction.executeSql(sql, params, function(tx, res) {
           var rows = [];
 
           for (var i = 0; i < res.rows.length; i++) {
-            var row = res.rows.item(i);
-            row._id = row.id;
-            rows.push(row);
+            rows.push(res.rows.item(i));
           }
 
           var response = {};
@@ -208,6 +194,7 @@ export default Ember.Service.extend({
           Ember.run(null, resolve, response);
         });
       }, function(tx, e) {
+        console.error(e);
         Ember.run(null, reject, e);
       });
     });
