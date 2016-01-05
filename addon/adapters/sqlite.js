@@ -14,12 +14,6 @@ export default DS.RESTAdapter.extend({
     return this.sqlite.findRecord(type, id);
   },
   query: function(store, type, query) {
-    var url = this.buildURL(type.modelName, null, null, 'query', query);
-
-    if (this.sortQueryParams) {
-      query = this.sortQueryParams(query);
-    }
-
     return this.sqlite.query(type, query);
   },
 
@@ -38,19 +32,10 @@ export default DS.RESTAdapter.extend({
     @return {Promise} promise
   */
   queryRecord: function(store, type, query) {
-    var url = this.buildURL(type.modelName, null, null, 'queryRecord', query);
-
-    if (this.sortQueryParams) {
-      query = this.sortQueryParams(query);
-    }
-
-    return this.ajax(url, 'GET', { data: query });
+    return this.sqlite.query(type, query);
   },
 
   updateRecord: function(store, type, snapshot) {
-    var data = {};
-    var serializer = store.serializerFor(type.modelName);
-
     return this.sqlite.updateRecord(store, type, snapshot.get("id"), snapshot);
   },
   deleteRecord: function(store, type, snapshot) {

@@ -1,7 +1,6 @@
 import Ember from 'ember';
 import QueryBuilder from "../lib/query";
-import Inflector from 'ember-inflector';
-import {singularize, pluralize} from 'ember-inflector';
+import {pluralize} from 'ember-inflector';
 import uuid from "../lib/uuid";
 
 /* global requirejs */
@@ -49,10 +48,6 @@ export default Ember.Service.extend({
         transaction.executeSql('CREATE TABLE IF NOT EXISTS migrations (id integer, date integer)');
 
         var migrations = _this.getMigrations();
-
-        var timestamps = migrations.map(function(name) {
-          return name.split("-")[0];
-        });
 
         transaction.executeSql("SELECT * FROM migrations", [], function(tx, res) {
           var alreadyExecuted = [];
@@ -157,13 +152,13 @@ export default Ember.Service.extend({
     var plural = this.pluralizeModelName(type.modelName);
     var params = [];
 
-    var keywords = ["limit", "offset"];
+    var keywords = ["limit", "offset", "sort_by", "sort_order", "per_page", "page"];
 
     var query = QueryBuilder.create();
     query.from(plural);
 
     if (options.page !== undefined) {
-      per_page = options.per_page || 10;
+      var per_page = options.per_page || 10;
 
       query.limit(per_page);
       query.offset((options.page - 1) * per_page);
@@ -233,7 +228,7 @@ export default Ember.Service.extend({
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        transaction.executeSql("SELECT * from '" + plural + "' WHERE id = ?;", [id], function(tx, res) {
+        transaction.executeSql("SELECT * from " + plural + " WHERE id = ?;", [id], function(tx, res) {
           if (res.rows.length === 0) {
             reject("Not found");
             return;
@@ -244,7 +239,6 @@ export default Ember.Service.extend({
           Object.keys(res.rows.item(0)).forEach(function(key) {
             coreData[key] = res.rows.item(0)[key];
           });
-          coreData._id = coreData.id;
           response[type.modelName] = coreData;
           resolve(response);
         }, function(tx, e) {
@@ -256,8 +250,6 @@ export default Ember.Service.extend({
   },
 
   createRecord: function(store, type, snapshot) {
-    var data = {};
-    var serializer = store.serializerFor(type.modelName);
     var _this = this;
 
     var data = snapshot.serialize({ includeId: true });
@@ -310,7 +302,7 @@ export default Ember.Service.extend({
           var sql = "UPDATE " + plural + " SET " + updates + " WHERE id = ?";
           params.push(id);
 
-          transaction.executeSql(sql, params, function(tx, res) {
+          transaction.executeSql(sql, params, function() {
             var response = {};
             response[type.modelName] = data;
             response[type.modelName].id = id;
@@ -356,8 +348,85 @@ export default Ember.Service.extend({
       _this.db.transaction(function(transaction) {
         var sql = "SELECT count(*) as c from " + plural;
         transaction.executeSql(sql, [], function(tx, res) {
-          resolve(res.rows.item(0).c);
+          Ember.run(null, resolve, res.rows.item(0).c);
         });
+      }, function(tx, error) {
+        Ember.run(null, reject, error);
+      });
+    });
+  },
+  customQuery: function() {
+    return QueryBuilder.create({ connection: this.db });
+  },
+  customInsert: function(type, data) {
+    var _this = this;
+    var plural = this.pluralizeModelName(type);
+    var sql = "INSERT INTO " + plural + " (";
+    sql += Object.keys(data).join(", ");
+    sql += ") VALUES (";
+    sql += Object.values(data).map(function(a) { return "?" });
+    var values = Object.values(data);
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        transaction.executeSql(sql, values, function(tx, res) {
+          Ember.run(null, resolve);
+        });
+      }, function(tx, error) {
+        Ember.run(null, reject, error);
+      });
+    });
+  },
+  customUpdate: function(type, data) {
+    var _this = this;
+    var plural = this.pluralizeModelName(type);
+    var sql = "UPDATE " + plural + " SET ";
+    var mapping = [];
+    var values = [];
+
+    // to keep them the same order
+    // as traversing objects doesn't always return
+    // same ordering
+    Object.keys(data).filter(function(k) {
+      return k !== "id";
+    }).forEach(function(key) {
+      mapping.push(key + " = ?");
+      values.push(data[key]);
+    });
+
+    sql += mapping.join(", ");
+    sql += " WHERE id = ?";
+
+    values.push(data.id);
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        Ember.debug(sql, values);
+        transaction.executeSql(sql, values, function(tx, res) {
+          Ember.run(null, resolve);
+        },function() {
+          Ember.run(null, reject, error);
+        });
+      });
+    });
+  },
+  insertOrUpdate: function(type, data) {
+    var _this = this;
+    var plural = this.pluralizeModelName(type);
+    var sql = "SELECT count(*) as c FROM " + plural + " WHERE id = ?";
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        Ember.debug(sql, [data.id]);
+        transaction.executeSql(sql, [data.id], function(tx, res) {
+          if (res.rows.item(0).c > 0) {
+            _this.customUpdate(type, data).then(resolve, reject);
+          } else {
+            _this.customInsert(type, data).then(resolve, reject);
+          }
+        });
+      }, function(tx, error) {
+        Ember.run(null, reject, error);
       });
     });
   }

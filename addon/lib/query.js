@@ -1,4 +1,5 @@
 import Ember from "ember";
+import DS from "ember-data";
 
 export default Ember.Object.extend({
   connection: null,
@@ -111,21 +112,28 @@ export default Ember.Object.extend({
     return sql;
   },
   renderWhere: function(where) {
-    var a = null;
-    var b = null;
-    var op = null;
+    if (Ember.isArray(where)) {
+      var a = null;
+      var b = null;
+      var op = null;
 
-    if (where.length === 2) {
-      a = where[0];
-      b = where[1];
-      op = "=";
+      if (where.length === 2) {
+        a = where[0];
+        b = where[1];
+        op = "=";
+      } else {
+        a = where[0];
+        op = where[1];
+        b = where[2];
+      }
+
+      return a + " " + op + " " + b;
     } else {
-      a = where[0];
-      op = where[1];
-      b = where[2];
-    }
+      // complex where
 
-    return a + " " + op + " " + b;
+      var innerWheres = where.conditions.map(w => this.renderWhere(w));
+      return "( " + innerWheres.join(" " + where.type + " ") + " )";
+    }
   },
   buildSQL: function() {
     var sql = "SELECT ";
@@ -175,10 +183,11 @@ export default Ember.Object.extend({
     this.lastSQL = sql;
 
     Ember.debug("[SQLITE ADAPTER SQL] " + sql);
+    Ember.debug("[SQLITE ADAPTER PARAMS] " + JSON.stringify(inputPreparedStatement));
 
     var _this = this;
 
-    return new Ember.RSVP.Promise(function(resolve, reject) {
+    var promise = new Ember.RSVP.Promise(function(resolve, reject) {
       _this.connection.transaction(function(tx) {
         tx.executeSql(sql, inputPreparedStatement, function(tx, res) {
           var result = {rows: res.rows.length, data: []};
@@ -192,6 +201,10 @@ export default Ember.Object.extend({
           reject(error);
         });
       });
+    });
+
+    return DS.PromiseObject.create({
+      promise: promise
     });
   }
 });
