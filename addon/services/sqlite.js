@@ -6,6 +6,7 @@ import uuid from "../lib/uuid";
 /* global requirejs */
 
 export default Ember.Service.extend({
+  store: Ember.inject.service(),
   /**
    * This method is responsible for
    * opening the database with the name fetched from the app's configuration file,
@@ -201,6 +202,7 @@ export default Ember.Service.extend({
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
+        Ember.debug("SELECT * from '" + plural + "'");
         transaction.executeSql("SELECT * from '" + plural + "'", [], function(tx, res) {
           var rows = [];
 
@@ -226,9 +228,42 @@ export default Ember.Service.extend({
     var _this = this;
     var plural = this.pluralizeModelName(type.modelName);
 
+    var dummyRecord = this.get("store").createRecord(type.modelName);
+    var snapshot = dummyRecord._createSnapshot();
+    var query = QueryBuilder.create();
+    var params = [];
+
+    query.from(plural);
+    query.where([plural + ".id", "?"]);
+    params.push(id);
+    var columns = [plural + ".*"];
+
+    snapshot.eachRelationship(function(name, relationship) {
+      if (relationship.kind == "hasMany") {
+        var table = _this.pluralizeModelName(relationship.type);
+
+        query.join({
+          type: "INNER",
+          table: table,
+          conditions: [
+            [table + "." + type.modelName + "_id", "?"]
+          ]
+        });
+        params.push(id);
+
+        columns.push(table + ".id as " + table + "__id");
+      }
+    });
+
+    query.select(columns);
+
+    dummyRecord.destroyRecord();
+
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        transaction.executeSql("SELECT * from " + plural + " WHERE id = ?;", [id], function(tx, res) {
+        var sql = query.buildSQL();
+        Ember.debug(sql);
+        transaction.executeSql(sql, params, function(tx, res) {
           if (res.rows.length === 0) {
             reject("Not found");
             return;
@@ -236,9 +271,23 @@ export default Ember.Service.extend({
 
           var response = {};
           var coreData = {};
-          Object.keys(res.rows.item(0)).forEach(function(key) {
-            coreData[key] = res.rows.item(0)[key];
-          });
+
+          for (var i = 0; i < res.rows.length; i++) {
+            Object.keys(res.rows.item(0)).forEach(function(key) {
+              if (key.indexOf("__") !== -1) {
+                var parts = key.split("__");
+
+                if (coreData[parts[0]] === undefined) {
+                  coreData[parts[0]] = [];
+                }
+
+                coreData[parts[0]].push(res.rows.item(i)[key]);
+              } else {
+                coreData[key] = res.rows.item(i)[key];
+              }
+            });
+          }
+
           response[type.modelName] = coreData;
           resolve(response);
         }, function(tx, e) {
@@ -364,8 +413,9 @@ export default Ember.Service.extend({
     var sql = "INSERT INTO " + plural + " (";
     sql += Object.keys(data).join(", ");
     sql += ") VALUES (";
-    sql += Object.values(data).map(function(a) { return "?" });
-    var values = Object.values(data);
+    sql += Object.keys(data).map(function(a) { return "?" });
+    sql += ")";
+    var values = Object.keys(data).map(k => data[k]);
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
@@ -414,6 +464,7 @@ export default Ember.Service.extend({
     var _this = this;
     var plural = this.pluralizeModelName(type);
     var sql = "SELECT count(*) as c FROM " + plural + " WHERE id = ?";
+    Ember.debug(plural);
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
@@ -424,9 +475,37 @@ export default Ember.Service.extend({
           } else {
             _this.customInsert(type, data).then(resolve, reject);
           }
+        }, function(tx, error) {
+          Ember.run(null, reject, error);
         });
-      }, function(tx, error) {
-        Ember.run(null, reject, error);
+      });
+    });
+  },
+  generateId: function() {
+    return uuid();
+  },
+  customDelete: function(type, conditions) {
+    var _this = this;
+    var plural = this.pluralizeModelName(type);
+    var sql = "DELETE FROM " + plural + " WHERE ";
+
+    var wheres = [];
+    var values = [];
+    Object.keys(conditions).forEach(function(key) {
+      wheres.push(key + " = ?");
+      values.push(conditions[key]);
+    });
+
+    sql += wheres.join(" AND ");
+
+    return new Ember.RSVP.Promise(function(resolve, reject) {
+      _this.db.transaction(function(transaction) {
+        Ember.debug(sql, values);
+        transaction.executeSql(sql, values, function(tx, res) {
+          Ember.run(null, resolve);
+        }, function(tx, error) {
+          Ember.run(null, reject, error);
+        });
       });
     });
   }

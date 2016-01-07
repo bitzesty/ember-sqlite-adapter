@@ -26,6 +26,6 @@ export function initialize(container, application) {
 
 export default {
   name: 'sqlite',
-  before: 'store',
+  after: 'store',
   initialize: initialize
 };
