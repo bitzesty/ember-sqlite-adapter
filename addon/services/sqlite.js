@@ -380,6 +380,7 @@ export default Ember.Service.extend({
           var sql = "UPDATE " + plural + " SET " + updates + " WHERE id = ?";
           params.push(id);
 
+          Ember.debug([sql,params]);
           transaction.executeSql(sql, params, function() {
             var response = {};
             // response[type.modelName] = data;
