@@ -36,7 +36,7 @@ export default DS.RESTAdapter.extend({
   },
 
   updateRecord: function(store, type, snapshot) {
-    return this.sqlite.updateRecord(store, type, snapshot.get("id"), snapshot);
+    return this.sqlite.updateRecord(store, type, snapshot.id, snapshot);
   },
   deleteRecord: function(store, type, snapshot) {
     var id = snapshot.id;
@@ -45,6 +45,6 @@ export default DS.RESTAdapter.extend({
 
     serializer.serializeIntoHash(data, type, snapshot, { includeId: true });
 
-    return this.sqlite.deleteRecord(type.modelName, id, data);
+    return this.sqlite.deleteRecord(type, id, data);
   },
 });

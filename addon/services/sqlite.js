@@ -1,6 +1,6 @@
 import Ember from 'ember';
 import QueryBuilder from "../lib/query";
-import {pluralize} from 'ember-inflector';
+import { pluralize } from 'ember-inflector';
 import uuid from "../lib/uuid";
 
 /* global requirejs */
@@ -184,10 +184,11 @@ export default Ember.Service.extend({
             rows.push(res.rows.item(i));
           }
 
-          var response = {};
-          response[plural] = rows;
-
-          Ember.run(null, resolve, response);
+          // var response = {};
+          // response[plural] = rows;
+          //
+          // Ember.run(null, resolve, response);
+          Ember.run(null, resolve, rows);
         });
       }, function(tx, e) {
         console.error(e);
@@ -202,18 +203,34 @@ export default Ember.Service.extend({
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        Ember.debug("SELECT * from '" + plural + "'");
-        transaction.executeSql("SELECT * from '" + plural + "'", [], function(tx, res) {
+
+        var columns = ['*'];
+
+        type.eachRelationship(function(key,relationshipMeta) {
+          if(relationshipMeta.kind === 'hasMany') {
+            columns.push(`(SELECT group_concat(id) from "${pluralize(relationshipMeta.type).underscore()}" where ${relationshipMeta.options.inverse} = ${plural}.id) ${key}`);
+          }
+        });
+
+        var sql = "SELECT " + columns.join(',') + " from '" + plural + "'";
+        Ember.debug(sql)
+        transaction.executeSql(sql, [], function(tx, res) {
           var rows = [];
 
           for (var i = 0; i < res.rows.length; i++) {
-            var row = res.rows.item(i);
+            var row = Ember.copy(res.rows.item(i));
             row._id = row.id;
+            type.eachRelationship(function(key,relationshipMeta) {
+              if(relationshipMeta.kind === 'hasMany' && row[key]) {
+                row[key] = row[key].split(',');
+              }
+            });
             rows.push(row);
           }
 
           var response = {};
-          response[plural] = rows;
+          // response[plural] = rows;
+          response = rows;
 
           Ember.run(null, resolve, response);
         }, function(tx, e) {
@@ -228,8 +245,8 @@ export default Ember.Service.extend({
     var _this = this;
     var plural = this.pluralizeModelName(type.modelName);
 
-    var dummyRecord = this.get("store").createRecord(type.modelName);
-    var snapshot = dummyRecord._createSnapshot();
+    // var dummyRecord = this.get("store").createRecord(type.modelName);
+    // var snapshot = dummyRecord._createSnapshot();
     var query = QueryBuilder.create();
     var params = [];
 
@@ -238,58 +255,69 @@ export default Ember.Service.extend({
     params.push(id);
     var columns = [plural + ".*"];
 
-    snapshot.eachRelationship(function(name, relationship) {
+    // snapshot.eachRelationship(function(name, relationship) {
+    type.eachRelationship(function(name, relationship) {
       if (relationship.kind == "hasMany") {
         var table = _this.pluralizeModelName(relationship.type);
 
-        query.join({
-          type: "INNER",
-          table: table,
-          conditions: [
-            [table + "." + type.modelName + "_id", "?"]
-          ]
-        });
-        params.push(id);
+        // query.join({
+        //   type: "INNER",
+        //   table: table,
+        //   conditions: [
+        //     [table + "." + type.modelName + "_id", "?"]
+        //   ]
+        // });
+        // params.push(id);
+        //
+        // columns.push(table + ".id as " + table + "__id");
+        columns.push(`(select group_concat(id) from ${table} where ${table}.${relationship.options.inverse} = ${plural}.id) ${name}`);
 
-        columns.push(table + ".id as " + table + "__id");
       }
     });
 
     query.select(columns);
 
-    dummyRecord.destroyRecord();
+    // dummyRecord.destroyRecord();
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
         var sql = query.buildSQL();
-        Ember.debug(sql);
+        Ember.debug([sql,params]);
         transaction.executeSql(sql, params, function(tx, res) {
           if (res.rows.length === 0) {
             reject("Not found");
             return;
           }
 
-          var response = {};
-          var coreData = {};
+          var data = Ember.copy(res.rows.item(0));
 
-          for (var i = 0; i < res.rows.length; i++) {
-            Object.keys(res.rows.item(0)).forEach(function(key) {
-              if (key.indexOf("__") !== -1) {
-                var parts = key.split("__");
-
-                if (coreData[parts[0]] === undefined) {
-                  coreData[parts[0]] = [];
-                }
-
-                coreData[parts[0]].push(res.rows.item(i)[key]);
-              } else {
-                coreData[key] = res.rows.item(i)[key];
-              }
-            });
-          }
-
-          response[type.modelName] = coreData;
-          resolve(response);
+          // var response = {};
+          // var coreData = {};
+          //
+          // for (var i = 0; i < res.rows.length; i++) {
+          //   Object.keys(res.rows.item(0)).forEach(function(key) {
+          //     if (key.indexOf("__") !== -1) {
+          //       var parts = key.split("__");
+          //
+          //       if (coreData[parts[0]] === undefined) {
+          //         coreData[parts[0]] = [];
+          //       }
+          //
+          //       coreData[parts[0]].push(res.rows.item(i)[key]);
+          //     } else {
+          //       coreData[key] = res.rows.item(i)[key];
+          //     }
+          //   });
+          // }
+          //
+          // response[type.modelName] = coreData;
+          // resolve(response);
+          type.eachRelationship(function(key,relationshipMeta){
+            if(relationshipMeta.kind === 'hasMany') {
+              data[key] = data[key] && data[key].split(',');
+            }
+          });
+          resolve(data)
         }, function(tx, e) {
           console.log(arguments);
           reject(e);
@@ -319,7 +347,8 @@ export default Ember.Service.extend({
       _this.db.transaction(function(transaction) {
         var sql = "INSERT INTO '" + plural + "' (" + columnNames.join(", ") + ") VALUES (" + prepParams + ");";
 
-
+        Ember.debug(sql);
+        Ember.debug(insertData);
         transaction.executeSql(sql, insertData, function(tx, res) {
           if (res.rowsAffected === 0) {
             return reject("Insert failed");
@@ -329,7 +358,7 @@ export default Ember.Service.extend({
           response[type.modelName] = data;
           resolve(response);
         }, function(tx, e) {
-          console.log(arguments);
+          console.log(arguments, e.message);
           reject(e);
         });
       });
@@ -351,12 +380,14 @@ export default Ember.Service.extend({
           var sql = "UPDATE " + plural + " SET " + updates + " WHERE id = ?";
           params.push(id);
 
+          Ember.debug([sql,params]);
           transaction.executeSql(sql, params, function() {
             var response = {};
-            response[type.modelName] = data;
-            response[type.modelName].id = id;
+            // response[type.modelName] = data;
+            // response[type.modelName].id = id;
 
-            resolve(response);
+            // resolve(response);
+            resolve(data);
           }, function(tx, e) {
             console.log(arguments);
             reject(e);
@@ -369,11 +400,14 @@ export default Ember.Service.extend({
   },
   deleteRecord: function(type, id, data) {
     var _this = this;
+    var plural = this.pluralizeModelName(type.modelName);
+
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        var sql = "DELETE FROM serialized_records WHERE id = ? AND type = ?;";
-        var params = [id, type];
+        var sql = "DELETE FROM " + plural + " WHERE id = ?;";
+        var params = [id];
 
+        Ember.debug(sql,params);
         transaction.executeSql(sql, params, function(tx, res) {
           if (res.rowsAffected === 0) {
             return reject("DELETE failed");

@@ -1,7 +1,10 @@
-export function initialize(container, application) {
+export function initialize() {
+
+  var application = arguments[1] || arguments[0];
+
   application.deferReadiness();
 
-  var sqlite = container.lookup("service:sqlite");
+  var sqlite = application.__container__.lookup("service:sqlite");
 
   if (window.cordova) {
     document.addEventListener("deviceready", function() {
