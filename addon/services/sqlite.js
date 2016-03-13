@@ -168,9 +168,30 @@ export default Ember.Service.extend({
     Object.keys(options).filter(function(k) {
       return keywords.indexOf(k) === -1;
     }).forEach(function(key) {
-      query.where([key, "?"]);
+      query.where([`${plural}.${key}`, "?"]);
       params.push(options[key]);
     });
+
+    var dummyRecord = this.get("store").createRecord(type.modelName);
+    var snapshot = dummyRecord._createSnapshot();
+    var columns = [plural + ".*"];
+    snapshot.eachRelationship(function(name, relationship) {
+      if (relationship.kind == "hasMany") {
+        var table = _this.pluralizeModelName(relationship.type);
+
+        query.join({
+          type: "LEFT",
+          table: table,
+          conditions: [
+            [table + "." + type.modelName.underscore() + "_id", `${plural}.id`]
+          ]
+        });
+
+        columns.push(table + ".id as " + table + "__id");
+      }
+    });
+
+    query.select(columns);
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
@@ -178,20 +199,42 @@ export default Ember.Service.extend({
 
         Ember.debug(sql);
         transaction.executeSql(sql, params, function(tx, res) {
-          var rows = [];
+          var rows = {};
 
           for (var i = 0; i < res.rows.length; i++) {
-            rows.push(res.rows.item(i));
+            var row = res.rows.item(i);
+
+            if (rows[row.id] === undefined) {
+              rows[row.id] = {};
+            }
+
+            Object.keys(row).forEach(function(key) {
+              if (key.indexOf("__") !== -1) {
+                var parts = key.split("__");
+
+                if (rows[row.id][parts[0]] === undefined) {
+                  rows[row.id][parts[0]] = [];
+                }
+
+                if (row[key]) {
+                  rows[row.id][parts[0]].push(row[key]);
+                }
+              } else {
+                rows[row.id][key] = row[key];
+              }
+            });
           }
 
           var response = {};
-          response[plural] = rows;
+          response[plural] = Object.keys(rows).map(function(key) {
+            return rows[key];
+          });
 
           Ember.run(null, resolve, response);
+        }, function(tx, e) {
+          console.log(e);
+          Ember.run(null, reject, e);
         });
-      }, function(tx, e) {
-        console.error(e);
-        Ember.run(null, reject, e);
       });
     });
   },
@@ -243,10 +286,10 @@ export default Ember.Service.extend({
         var table = _this.pluralizeModelName(relationship.type);
 
         query.join({
-          type: "INNER",
+          type: "LEFT",
           table: table,
           conditions: [
-            [table + "." + type.modelName + "_id", "?"]
+            [table + "." + type.modelName.underscore() + "_id", "?"]
           ]
         });
         params.push(id);
@@ -263,6 +306,7 @@ export default Ember.Service.extend({
       _this.db.transaction(function(transaction) {
         var sql = query.buildSQL();
         Ember.debug(sql);
+        Ember.debug(params);
         transaction.executeSql(sql, params, function(tx, res) {
           if (res.rows.length === 0) {
             reject("Not found");
@@ -281,7 +325,9 @@ export default Ember.Service.extend({
                   coreData[parts[0]] = [];
                 }
 
-                coreData[parts[0]].push(res.rows.item(i)[key]);
+                if (res.rows.item(i)[key]) {
+                  coreData[parts[0]].push(res.rows.item(i)[key]);
+                }
               } else {
                 coreData[key] = res.rows.item(i)[key];
               }
@@ -369,10 +415,12 @@ export default Ember.Service.extend({
   },
   deleteRecord: function(type, id, data) {
     var _this = this;
+    var plural = this.pluralizeModelName(type.modelName);
+
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        var sql = "DELETE FROM serialized_records WHERE id = ? AND type = ?;";
-        var params = [id, type];
+        var sql = "DELETE FROM " + plural + " WHERE id = ?;";
+        var params = [id];
 
         transaction.executeSql(sql, params, function(tx, res) {
           if (res.rowsAffected === 0) {
@@ -380,7 +428,8 @@ export default Ember.Service.extend({
           }
 
           resolve(data);
-        }, function(e) {
+        }, function(tx, e) {
+          console.log(e);
           reject(e);
         });
       });
@@ -421,9 +470,9 @@ export default Ember.Service.extend({
       _this.db.transaction(function(transaction) {
         transaction.executeSql(sql, values, function(tx, res) {
           Ember.run(null, resolve);
+        }, function(tx, error) {
+          Ember.run(null, reject, error);
         });
-      }, function(tx, error) {
-        Ember.run(null, reject, error);
       });
     });
   },

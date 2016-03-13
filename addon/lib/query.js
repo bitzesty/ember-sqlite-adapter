@@ -197,7 +197,8 @@ export default Ember.Object.extend({
           }
 
           resolve(result);
-        }, function(error) {
+        }, function(tx, error) {
+          console.log(error);
           reject(error);
         });
       });
