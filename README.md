@@ -3,9 +3,6 @@
 This addon is intended to be used with PhoneGap/Cordova, but does check for its presence ,falling back to a WebSQL database, which can be used for tests and development inside browsers.
 
 [![Latest NPM release][npm-badge]][npm-badge-url]
-[![TravisCI Build Status][travis-badge]][travis-badge-url]
-[![Test Coverage][coveralls-badge]][coveralls-badge-url]
-[![Code Climate][codeclimate-badge]][codeclimate-badge-url]
 [![Ember Observer Score][ember-observer-badge]][ember-observer-badge-url]
 [![License][license-badge]][license-badge-url]
 [![Dependencies][dependencies-badge]][dependencies-badge-url]
