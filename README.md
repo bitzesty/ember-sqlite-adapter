@@ -2,6 +2,15 @@
 
 This addon is intended to be used with PhoneGap/Cordova, but does check for its presence ,falling back to a WebSQL database, which can be used for tests and development inside browsers.
 
+[![Latest NPM release][npm-badge]][npm-badge-url]
+[![TravisCI Build Status][travis-badge]][travis-badge-url]
+[![Test Coverage][coveralls-badge]][coveralls-badge-url]
+[![Code Climate][codeclimate-badge]][codeclimate-badge-url]
+[![Ember Observer Score][ember-observer-badge]][ember-observer-badge-url]
+[![License][license-badge]][license-badge-url]
+[![Dependencies][dependencies-badge]][dependencies-badge-url]
+[![Dev Dependencies][devDependencies-badge]][devDependencies-badge-url]
+
 [npm-badge]: https://img.shields.io/npm/v/ember-sqlite-adapter.svg
 [npm-badge-url]: https://www.npmjs.com/package/ember-sqlite-adapter
 [ember-observer-badge]: http://emberobserver.com/badges/ember-sqlite-adapter.svg
@@ -19,6 +28,14 @@ This addon should *NOT* be considered stable and production ready. It is under h
 By the time we hit 1.0, you can then assume it is stable.
 
 Tested only with Ember CLI 2.5.1, Ember 2.5+ and Ember Data 2.5+.
+
+## Roadmap to Version 1.0
+
+[X] Make compatible with latest version of Ember and Ember Data
+[ ] Support all kinds of relationships
+[ ] Support for multiple databases
+[ ] Support all Ember Data actions
+[ ] Extensive support for custom queries
 
 ## Pre-requisites
 
