@@ -2,6 +2,7 @@ import Ember from 'ember';
 import QueryBuilder from "../lib/query";
 import {pluralize} from 'ember-inflector';
 import uuid from "../lib/uuid";
+const { getOwner } = Ember;
 
 /* global requirejs */
 
@@ -14,15 +15,11 @@ export default Ember.Service.extend({
    *
    * @return {void} Open database and invoke function to create table
    */
-  openDatabase: function() {
+  openDatabase: function(db_name) {
     var _this = this;
     this.schemaCache = {};
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
-      var config = _this.container.lookupFactory('config:environment');
-
-      var db_name = config !== undefined ? config.sqlite.db_name : "my_app_db";
-
       if (window.cordova && window.sqlitePlugin !== undefined) {
         _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db"});
       } else {
@@ -30,7 +27,7 @@ export default Ember.Service.extend({
         _this.db = window.openDatabase(db_name, '1.0', db_name, 1);
       }
 
-      _this.checkCreateTables(_this.container).then(resolve, reject);
+      _this.checkCreateTables(getOwner(_this)).then(resolve, reject);
     });
   },
 
@@ -62,7 +59,7 @@ export default Ember.Service.extend({
           });
 
           migrations.forEach(function(name) {
-            var migration = _this.container.lookup("migration:" + name);
+            var migration = getOwner(_this).lookup("migration:" + name);
             var timestamp = name.split("-")[0];
 
             if (alreadyExecuted.indexOf(timestamp) === -1) {
@@ -176,7 +173,7 @@ export default Ember.Service.extend({
     var snapshot = dummyRecord._createSnapshot();
     var columns = [plural + ".*"];
     snapshot.eachRelationship(function(name, relationship) {
-      if (relationship.kind == "hasMany") {
+      if (relationship.kind === "hasMany") {
         var table = _this.pluralizeModelName(relationship.type);
 
         query.join({
@@ -201,9 +198,12 @@ export default Ember.Service.extend({
         transaction.executeSql(sql, params, function(tx, res) {
           var rows = {};
 
+          var _rows = [];
           for (var i = 0; i < res.rows.length; i++) {
-            var row = res.rows.item(i);
+            _rows.push(res.rows.item(i));
+          }
 
+          _rows.forEach(function(row) {
             if (rows[row.id] === undefined) {
               rows[row.id] = {};
             }
@@ -223,7 +223,7 @@ export default Ember.Service.extend({
                 rows[row.id][key] = row[key];
               }
             });
-          }
+          });
 
           var response = {};
           response[plural] = Object.keys(rows).map(function(key) {
@@ -282,7 +282,7 @@ export default Ember.Service.extend({
     var columns = [plural + ".*"];
 
     snapshot.eachRelationship(function(name, relationship) {
-      if (relationship.kind == "hasMany") {
+      if (relationship.kind === "hasMany") {
         var table = _this.pluralizeModelName(relationship.type);
 
         query.join({
@@ -316,7 +316,12 @@ export default Ember.Service.extend({
           var response = {};
           var coreData = {};
 
+          var _rows = [];
           for (var i = 0; i < res.rows.length; i++) {
+            _rows.push(res.rows.item(i));
+          }
+
+          _rows.forEach(function(row) {
             Object.keys(res.rows.item(0)).forEach(function(key) {
               if (key.indexOf("__") !== -1) {
                 var parts = key.split("__");
@@ -325,14 +330,14 @@ export default Ember.Service.extend({
                   coreData[parts[0]] = [];
                 }
 
-                if (res.rows.item(i)[key]) {
-                  coreData[parts[0]].push(res.rows.item(i)[key]);
+                if (row[key]) {
+                  coreData[parts[0]].push(row[key]);
                 }
               } else {
-                coreData[key] = res.rows.item(i)[key];
+                coreData[key] = row[key];
               }
             });
-          }
+          });
 
           response[type.modelName] = coreData;
           resolve(response);
@@ -462,13 +467,13 @@ export default Ember.Service.extend({
     var sql = "INSERT INTO " + plural + " (";
     sql += Object.keys(data).join(", ");
     sql += ") VALUES (";
-    sql += Object.keys(data).map(function(a) { return "?" });
+    sql += Object.keys(data).map(() => "?");
     sql += ")";
     var values = Object.keys(data).map(k => data[k]);
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        transaction.executeSql(sql, values, function(tx, res) {
+        transaction.executeSql(sql, values, function() {
           Ember.run(null, resolve);
         }, function(tx, error) {
           Ember.run(null, reject, error);
@@ -501,9 +506,9 @@ export default Ember.Service.extend({
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
         Ember.debug(sql, values);
-        transaction.executeSql(sql, values, function(tx, res) {
+        transaction.executeSql(sql, values, function() {
           Ember.run(null, resolve);
-        },function() {
+        },function(tx, error) {
           Ember.run(null, reject, error);
         });
       });
@@ -550,7 +555,7 @@ export default Ember.Service.extend({
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
         Ember.debug(sql, values);
-        transaction.executeSql(sql, values, function(tx, res) {
+        transaction.executeSql(sql, values, function() {
           Ember.run(null, resolve);
         }, function(tx, error) {
           Ember.run(null, reject, error);

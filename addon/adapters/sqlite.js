@@ -1,20 +1,22 @@
 import DS from 'ember-data';
+import Ember from "ember";
 
 export default DS.RESTAdapter.extend({
+  sqlite: Ember.inject.service(),
   findAll: function(_store, type) {
-    return this.sqlite.findAll(type);
+    return this.get("sqlite").findAll(type);
   },
   findRecord: function(_store, type, id) {
-    return this.sqlite.findRecord(type, id);
+    return this.get("sqlite").findRecord(type, id);
   },
   createRecord: function(store, type, snapshot) {
-    return this.sqlite.createRecord(store, type, snapshot);
+    return this.get("sqlite").createRecord(store, type, snapshot);
   },
   find: function(store, type, id) {
-    return this.sqlite.findRecord(type, id);
+    return this.get("sqlite").findRecord(type, id);
   },
   query: function(store, type, query) {
-    return this.sqlite.query(type, query);
+    return this.get("sqlite").query(type, query);
   },
 
   /**
@@ -32,15 +34,15 @@ export default DS.RESTAdapter.extend({
     @return {Promise} promise
   */
   queryRecord: function(store, type, query) {
-    return this.sqlite.query(type, query);
+    return this.get("sqlite").query(type, query);
   },
 
   updateRecord: function(store, type, snapshot) {
-    return this.sqlite.updateRecord(store, type, snapshot.get("id"), snapshot);
+    return this.get("sqlite").updateRecord(store, type, snapshot.id, snapshot);
   },
   deleteRecord: function(store, type, snapshot) {
     var id = snapshot.id;
 
-    return this.sqlite.deleteRecord(type, id);
+    return this.get("sqlite").deleteRecord(type, id);
   },
 });
