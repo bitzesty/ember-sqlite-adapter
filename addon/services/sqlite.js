@@ -15,21 +15,20 @@ export default Ember.Service.extend({
    *
    * @return {void} Open database and invoke function to create table
    */
-  openDatabase: function(db_name) {
-    var _this = this;
-    this.schemaCache = {};
+   openDatabase: function(db_name, location) {
+     var _this = this;
+     this.schemaCache = {};
 
-    return new Ember.RSVP.Promise(function(resolve, reject) {
-      if (window.cordova && window.sqlitePlugin !== undefined) {
-        _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db"});
-      } else {
-        // WebSQL
-        _this.db = window.openDatabase(db_name, '1.0', db_name, 1);
-      }
+     return new Ember.RSVP.Promise(function(resolve, reject) {
+       if (window.cordova && window.sqlitePlugin !== undefined) {
+         _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db", location: location});
+       } else {
+         _this.db = window.openDatabase(db_name, '1.0', db_name, 1);
+       }
 
-      _this.checkCreateTables(getOwner(_this)).then(resolve, reject);
-    });
-  },
+       _this.checkCreateTables(getOwner(_this)).then(resolve, reject);
+     });
+   },
 
   /**
    * This method creates the migrations table if it doesn't exist, and then
