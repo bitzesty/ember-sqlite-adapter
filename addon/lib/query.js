@@ -177,9 +177,13 @@ export default Ember.Object.extend({
     return sql;
   },
   execute: function(inputPreparedStatement) {
+    var sql = this.buildSQL();
+
+    return this.executeSQL(sql, inputPreparedStatement);
+  },
+  executeSQL: function(sql, inputPreparedStatement) {
     inputPreparedStatement = inputPreparedStatement || [];
 
-    var sql = this.buildSQL();
     this.lastSQL = sql;
 
     Ember.debug("[SQLITE ADAPTER SQL] " + sql);
