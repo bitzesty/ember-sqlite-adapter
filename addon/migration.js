@@ -20,7 +20,7 @@ export default Ember.Object.extend({
    *
    * @method run
    */
-  run: Ember.K,
+  run() {},
   /**
    * Initialize the promise chain with a resolving
    * promise.
