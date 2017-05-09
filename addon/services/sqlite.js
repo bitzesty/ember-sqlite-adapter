@@ -15,13 +15,13 @@ export default Ember.Service.extend({
    *
    * @return {void} Open database and invoke function to create table
    */
-  openDatabase: function(db_name) {
+  openDatabase: function(db_name, db_location) {
     var _this = this;
     this.schemaCache = {};
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       if (window.cordova && window.sqlitePlugin !== undefined) {
-        _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db"});
+        _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db", location: db_location || "default" });
       } else {
         // WebSQL
         _this.db = window.openDatabase(db_name, '1.0', db_name, 1);
