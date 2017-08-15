@@ -591,4 +591,3 @@ export default Ember.Service.extend({
     });
   }
 });
-        _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db", location: db_location || "default" });
