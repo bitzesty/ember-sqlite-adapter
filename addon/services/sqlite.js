@@ -15,19 +15,32 @@ export default Ember.Service.extend({
    *
    * @return {void} Open database and invoke function to create table
    */
-  openDatabase: function(db_name, db_location) {
+  openDatabase: function(db_name) {
     var _this = this;
     this.schemaCache = {};
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       if (window.cordova && window.sqlitePlugin !== undefined) {
-        _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db", location: db_location || "default" });
+        _this.db = window.sqlitePlugin.openDatabase({
+          name: db_name + ".db",
+          location: 'default'
+        });
       } else {
         // WebSQL
         _this.db = window.openDatabase(db_name, '1.0', db_name, 1);
       }
 
       _this.checkCreateTables(getOwner(_this)).then(resolve, reject);
+    });
+  },
+
+  close: function() {
+    var _this = this;
+
+    this.db.close(function() {
+      _this.db = null;
+    }, function() {
+      _this.db = null;
     });
   },
 
@@ -43,7 +56,7 @@ export default Ember.Service.extend({
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
-        transaction.executeSql('CREATE TABLE IF NOT EXISTS migrations (id integer, date integer)');
+        transaction.executeSql('CREATE TABLE IF NOT EXISTS migrations (id text, date text)');
 
         var migrations = _this.getMigrations();
 
@@ -63,20 +76,22 @@ export default Ember.Service.extend({
             var timestamp = name.split("-")[0];
 
             if (alreadyExecuted.indexOf(timestamp) === -1) {
-              Ember.debug("Executing migration of id: " + timestamp);
-              lastPromise = lastPromise.then(function() {
-                var promise = migration._internalRun(_this.db);
-                promise.then(function() {
-                  _this.db.transaction(function(tx) {
-                    tx.executeSql("INSERT INTO migrations (id, date) VALUES (?, ?)", [timestamp, new Date().getTime()]);
-                  }, function(error) {
-                    console.log(error);
-                    reject(error);
+              (function(stamp) {
+                Ember.debug("Executing migration of id: " + stamp);
+                lastPromise = lastPromise.then(function() {
+                  var promise = migration._internalRun(_this.db);
+                  promise.then(function() {
+                    _this.db.transaction(function(tx) {
+                      tx.executeSql("INSERT INTO migrations (id, date) VALUES (?, ?)", [stamp, new Date().getTime()]);
+                    }, function(error) {
+                      console.log(error);
+                      reject(error);
+                    });
                   });
-                });
 
-                return promise;
-              });
+                  return promise;
+                });
+              })(timestamp);
             }
           });
 
@@ -165,8 +180,13 @@ export default Ember.Service.extend({
     Object.keys(options).filter(function(k) {
       return keywords.indexOf(k) === -1;
     }).forEach(function(key) {
-      query.where([`${plural}.${key}`, "?"]);
-      params.push(options[key]);
+      if (options[key] instanceof Array) {
+        let vals = options[key].join("','");
+        query.where([`${plural}.${key}`, "IN", `('${vals}')`]);
+      } else {
+        query.where([`${plural}.${key}`, "?"]);
+        params.push(options[key]);
+      }
     });
 
     var dummyRecord = this.get("store").createRecord(type.modelName);
@@ -440,17 +460,24 @@ export default Ember.Service.extend({
       });
     });
   },
-  /**
-   * TODO: add conditions
-   */
-  count: function(type) {
+  count: function(type, conditions) {
     var _this = this;
     var plural = this.pluralizeModelName(type);
 
     return new Ember.RSVP.Promise(function(resolve, reject) {
       _this.db.transaction(function(transaction) {
         var sql = "SELECT count(*) as c from " + plural;
-        transaction.executeSql(sql, [], function(tx, res) {
+        var params = [];
+
+        if (conditions) {
+          sql += " WHERE ";
+          Object.keys(conditions).forEach(function(k) {
+            sql += k + " = ? ";
+            params.push(conditions[k]);
+          });
+        }
+
+        transaction.executeSql(sql, params, function(tx, res) {
           Ember.run(null, resolve, res.rows.item(0).c);
         });
       }, function(tx, error) {
@@ -564,3 +591,4 @@ export default Ember.Service.extend({
     });
   }
 });
+        _this.db = window.sqlitePlugin.openDatabase({name: db_name + ".db", location: db_location || "default" });
