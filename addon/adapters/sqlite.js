@@ -19,6 +19,12 @@ export default DS.RESTAdapter.extend({
     return this.get("sqlite").query(type, query);
   },
 
+  findMany: function(store, type, ids, snapshots) {
+    return this.query(store, type, {
+      id: ids
+    });
+  },
+
   /**
     Called by the store in order to fetch a JSON object for
     the record that matches a particular query.

@@ -37,11 +37,7 @@ export default Ember.Service.extend({
   close: function() {
     var _this = this;
 
-    this.db.close(function() {
-      _this.db = null;
-    }, function() {
-      _this.db = null;
-    });
+    this.db = null;
   },
 
   /**
@@ -162,6 +158,7 @@ export default Ember.Service.extend({
 
   query: function(type, options) {
     var _this = this;
+
     var plural = this.pluralizeModelName(type.modelName);
     var params = [];
 
@@ -192,21 +189,26 @@ export default Ember.Service.extend({
     var dummyRecord = this.get("store").createRecord(type.modelName);
     var snapshot = dummyRecord._createSnapshot();
     var columns = [plural + ".*"];
-    snapshot.eachRelationship(function(name, relationship) {
+
+    var relations = [];
+
+    snapshot.eachRelationship((name, relationship) => {
       if (relationship.kind === "hasMany") {
         var table = _this.pluralizeModelName(relationship.type);
 
-        query.join({
-          type: "LEFT",
+        relations.push({
           table: table,
-          conditions: [
-            [table + "." + type.modelName.underscore() + "_id", `${plural}.id`]
-          ]
+          column: type.modelName.underscore() + "_id",
+          model: this.get("store").modelFor(relationship.type),
+          relation: relationship.type.underscore() + "_ids"
         });
-
-        columns.push(table + ".id as " + table + "__id");
       }
     });
+
+    var response = {};
+    var coreData = {};
+
+    response[plural] = [];
 
     query.select(columns);
 
@@ -245,12 +247,24 @@ export default Ember.Service.extend({
             });
           });
 
-          var response = {};
-          response[plural] = Object.keys(rows).map(function(key) {
-            return rows[key];
+          Object.keys(rows).forEach(function(key) {
+            response[plural].push(rows[key]);
           });
 
-          Ember.run(null, resolve, response);
+          var promises = [];
+
+          relations.map(function(relation) {
+            response[plural].forEach(function(r) {
+              var sql = "SELECT id FROM " + relation["table"] + " WHERE " + relation["column"] + " = ?";
+              promises.push(_this.customQuery().executeSQL(sql, [r.id]).then(data => {
+                r[relation["table"]] = data.data.map(d => d.id);
+              }));
+            });
+          });
+
+          Ember.RSVP.all(promises).then(function() {
+            resolve(response);
+          }, reject);
         }, function(tx, e) {
           console.log(e);
           Ember.run(null, reject, e);
@@ -287,7 +301,7 @@ export default Ember.Service.extend({
     });
   },
 
-  findRecord: function(type, id) {
+  findRecord: async function(type, id) {
     var _this = this;
     var plural = this.pluralizeModelName(type.modelName);
 
@@ -301,22 +315,33 @@ export default Ember.Service.extend({
     params.push(id);
     var columns = [plural + ".*"];
 
-    snapshot.eachRelationship(function(name, relationship) {
+    var relations = [];
+
+    snapshot.eachRelationship((name, relationship) => {
       if (relationship.kind === "hasMany") {
         var table = _this.pluralizeModelName(relationship.type);
 
-        query.join({
-          type: "LEFT",
+        relations.push({
           table: table,
-          conditions: [
-            [table + "." + type.modelName.underscore() + "_id", "?"]
-          ]
+          column: type.modelName.underscore() + "_id",
+          model: this.get("store").modelFor(relationship.type),
+          relation: relationship.type.underscore() + "_ids",
+          id: id
         });
-        params.push(id);
-
-        columns.push(table + ".id as " + table + "__id");
       }
     });
+
+    var response = {};
+    var coreData = {};
+
+    for (var relation of relations) {
+      var options = {};
+
+      options[relation["column"]] = relation["id"];
+      let resp = await this.query(relation["model"], options);
+      response[relation["table"]] = resp[relation["table"]];
+      coreData[relation["table"]] = resp[relation["table"]].map((s) => s.id);
+    }
 
     query.select(columns);
 
@@ -333,8 +358,6 @@ export default Ember.Service.extend({
             return;
           }
 
-          var response = {};
-          var coreData = {};
 
           var _rows = [];
           for (var i = 0; i < res.rows.length; i++) {
@@ -343,24 +366,15 @@ export default Ember.Service.extend({
 
           _rows.forEach(function(row) {
             Object.keys(res.rows.item(0)).forEach(function(key) {
-              if (key.indexOf("__") !== -1) {
-                var parts = key.split("__");
-
-                if (coreData[parts[0]] === undefined) {
-                  coreData[parts[0]] = [];
-                }
-
-                if (row[key]) {
-                  coreData[parts[0]].push(row[key]);
-                }
-              } else {
-                coreData[key] = row[key];
-              }
+              coreData[key] = row[key];
             });
           });
 
           response[type.modelName] = coreData;
-          resolve(response);
+
+          Ember.run.next(this, function() {
+            resolve(response);
+          });
         }, function(tx, e) {
           console.log(arguments);
           reject(e);
@@ -573,8 +587,17 @@ export default Ember.Service.extend({
     var wheres = [];
     var values = [];
     Object.keys(conditions).forEach(function(key) {
-      wheres.push(key + " = ?");
-      values.push(conditions[key]);
+      if (conditions[key] instanceof Array) {
+        wheres.push(key + " IN ('" + conditions[key].join("', '") + "')");
+      } else {
+        if (key.indexOf("NOT") > -1) {
+          wheres.push(key + " != ?");
+        } else {
+          wheres.push(key + " = ?");
+        }
+
+        values.push(conditions[key]);
+      }
     });
 
     sql += wheres.join(" AND ");
